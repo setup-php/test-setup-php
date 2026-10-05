@@ -1,0 +1,35 @@
+name: Runner cache validation
+on:
+  push:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnostics:
+    name: Inspect ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - blacksmith-2vcpu-ubuntu-2204
+          - blacksmith-2vcpu-ubuntu-2204-arm
+          - blacksmith-2vcpu-ubuntu-2404
+          - blacksmith-2vcpu-ubuntu-2404-arm
+          - depot-ubuntu-22.04
+          - depot-ubuntu-22.04-arm
+          - depot-ubuntu-24.04
+          - depot-ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Inspect runner and image
+        run: python3 scripts/inspect-runner.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: diagnostics-${{ matrix.runner }}
+          path: reports/
+          if-no-files-found: error
