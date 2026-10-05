@@ -30,7 +30,6 @@ jobs:
         with:
           php-version: ${{ matrix.php-version }}
         env:
-          verbose: v
           use_builds_cache: true
       - name: Testing PHP version
         env:
