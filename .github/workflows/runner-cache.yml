@@ -1,0 +1,61 @@
+name: Runner cache validation - quoted versions
+on:
+  push:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnostics:
+    name: PHP ${{ matrix.php }} on ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - blacksmith-2vcpu-ubuntu-2204
+          - blacksmith-2vcpu-ubuntu-2204-arm
+          - blacksmith-2vcpu-ubuntu-2404
+          - blacksmith-2vcpu-ubuntu-2404-arm
+          - depot-ubuntu-22.04
+          - depot-ubuntu-22.04-arm
+          - depot-ubuntu-24.04
+          - depot-ubuntu-24.04-arm
+        php: ['5.6', '7.0', '7.1', '7.2', '7.3', '7.4', '8.0', '8.1', '8.2', '8.3', '8.4', '8.5', '8.6', '8.7']
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Inspect runner and image
+        run: python3 scripts/inspect-runner.py
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: shivammathur/setup-php
+          ref: 421f97feafdad867301f2429af811a147575170f
+          path: action
+          persist-credentials: false
+      - name: Apply candidate and check runner detection
+        run: |
+          cp overrides/*.sh action/src/scripts/
+          bash scripts/check-detection.sh
+      - name: Set up PHP from builds cache
+        id: setup
+        uses: ./action
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: curl, dom, gd, intl, mbstring, mysqli, pdo_mysql, pdo_sqlite, xml, zip
+          coverage: none
+          tools: composer
+        env:
+          use_builds_cache: 'true'
+          update: 'true'
+          fail_fast: 'true'
+      - name: Validate cached PHP and package health
+        if: ${{ !cancelled() && steps.setup.outcome != 'skipped' }}
+        run: bash scripts/check-php.sh '${{ matrix.php }}'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: diagnostics-${{ matrix.runner }}-php-${{ matrix.php }}
+          path: reports/
+          if-no-files-found: error
