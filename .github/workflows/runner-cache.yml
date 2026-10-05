@@ -6,7 +6,6 @@ permissions:
   contents: read
 jobs:
   diagnostics:
-    name: Validate ${{ matrix.runner }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 15
     strategy:
@@ -50,7 +49,7 @@ jobs:
           update: 'true'
           fail_fast: 'true'
       - name: Validate cached PHP and package health
-        run: bash scripts/check-php.sh
+        run: bash scripts/check-php.sh ${{ matrix.php }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
