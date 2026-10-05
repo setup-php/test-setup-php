@@ -1,0 +1,41 @@
+name: Bare runner library baseline
+on:
+  push:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  baseline:
+    name: Baseline on ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - ubuntu-22.04
+          - ubuntu-22.04-arm
+          - ubuntu-24.04
+          - ubuntu-24.04-arm
+          - blacksmith-2vcpu-ubuntu-2204
+          - blacksmith-2vcpu-ubuntu-2204-arm
+          - blacksmith-2vcpu-ubuntu-2404
+          - blacksmith-2vcpu-ubuntu-2404-arm
+          - depot-ubuntu-22.04
+          - depot-ubuntu-22.04-arm
+          - depot-ubuntu-24.04
+          - depot-ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Inspect preinstalled libraries
+        env:
+          TEST_RUNNER_LABEL: ${{ matrix.runner }}
+        run: python3 scripts/library-baseline.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: baseline-${{ matrix.runner }}
+          path: reports/
+          if-no-files-found: error
