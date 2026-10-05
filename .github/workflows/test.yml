@@ -19,8 +19,6 @@ jobs:
           extensions: http
         env:
           verbose: v
-          runner: github
-          use_package_cache: true
       - run: |
           php -v
           php -m
