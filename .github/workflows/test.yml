@@ -19,7 +19,7 @@ jobs:
           extensions: http
         env:
           verbose: v
-          runner: self-hosted
+          runner: github
       - run: |
           php -v
           php -m
