@@ -51,7 +51,7 @@ for _ in range(20):
             settings = json.loads(settings_path.read_text())
             settings_report["keys"] = sorted(settings)
             settings_report["selected"] = {key: settings.get(key) for key in (
-                "agentName", "ephemeral", "poolName", "workFolder", "disableUpdate",
+                "AgentName", "Ephemeral", "PoolName", "WorkFolder", "DisableUpdate",
             )}
         except (OSError, ValueError) as error:
             settings_report["error"] = str(error)
@@ -67,6 +67,9 @@ for filename in ("/imagegeneration/imagedata.json", "/etc/image-id", "/etc/lsb-r
         if path.suffix == ".json":
             try:
                 data = json.loads(path.read_text())
+                entry["data_type"] = type(data).__name__
+                if isinstance(data, list):
+                    entry["groups"] = data
                 entry["keys"] = sorted(data) if isinstance(data, dict) else []
                 entry["selected"] = {key: data.get(key) for key in (
                     "image_os", "image_version", "ImageOS", "ImageVersion", "os", "version",
