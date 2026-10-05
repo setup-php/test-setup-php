@@ -2,6 +2,7 @@
 set -euo pipefail
 . /etc/os-release
 mkdir -p reports
+version=$1
 php -v | tee reports/php-version.txt
 php -m | tee reports/php-modules.txt
 php --ini | tee reports/php-ini.txt
@@ -10,7 +11,6 @@ phpize --version | tee reports/phpize.txt
 composer --version | tee reports/composer.txt
 file -L "$(command -v php)" | tee reports/php-binary.txt
 php -r '
-  if (PHP_MAJOR_VERSION !== 8 || PHP_MINOR_VERSION !== 5) { throw new Exception("Unexpected PHP version"); }
   foreach (["curl", "dom", "gd", "intl", "mbstring", "mysqli", "pdo_mysql", "pdo_sqlite", "xml", "zip"] as $extension) {
     if (!extension_loaded($extension)) { throw new Exception("Missing extension: " . $extension); }
   }
@@ -31,7 +31,7 @@ fi
 
 suffix=
 [[ "$(uname -m)" = aarch64 ]] && suffix=_arm64
-artifact="/tmp/php_8.5-nts+ubuntu${VERSION_ID}${suffix}.tar.zst"
+artifact="/tmp/php_$version-nts+ubuntu${VERSION_ID}${suffix}.tar.zst"
 test -s "$artifact"
 zstd -t "$artifact"
 sha256sum "$artifact" | tee reports/cache-sha256.txt
