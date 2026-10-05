@@ -7,7 +7,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [blacksmith-2vcpu-ubuntu-2204, ubuntu-22.04, blacksmith-2vcpu-ubuntu-2404, ubuntu-24.04, blacksmith-2vcpu-ubuntu-2604, ubuntu-26.04]
+        os: [blacksmith-2vcpu-ubuntu-2204, ubuntu-22.04, blacksmith-2vcpu-ubuntu-2404, ubuntu-24.04, depot-ubuntu-22.04]
         php-version:
           - 8.7
 
