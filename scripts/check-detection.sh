@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -e
+set -eo pipefail
 . action/src/scripts/unix.sh
 . /etc/os-release
 check_ppa() { return 0; }

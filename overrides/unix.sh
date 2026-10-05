@@ -67,7 +67,7 @@ check_builds_cache_runner() {
     executable="$(readlink -f "/proc/$pid/exe")" || return 1
     if [[ "$executable" = */bin/Runner.Worker ]]; then
       jq -e --arg name "${RUNNER_NAME:-}" \
-        '.Ephemeral == true and .AgentName == $name and (.AgentName | test("^(blacksmith|depot)-"))' \
+        '.AgentName == $name and (.AgentName | test("^(blacksmith|depot)-"))' \
         "${executable%/bin/Runner.Worker}/.runner" >/dev/null 2>&1
       return $?
     fi
