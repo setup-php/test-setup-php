@@ -27,7 +27,7 @@ run_check() {
 
 check_startup() {
   local output status
-  output=$(php -d display_startup_errors=stderr -d display_errors=stderr -r '' 2>&1)
+  output=$(php -d display_startup_errors=stderr -d display_errors=stderr -r 'exit(0);' 2>&1)
   status=$?
   printf '%s\n' "$output"
   [ "$status" -eq 0 ] && [ -z "$output" ]
