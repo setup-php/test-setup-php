@@ -27,10 +27,13 @@ def gh(path, method='GET', data=None):
 def launch(args):
     pool = 'runner-pool-' + datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d-%H%M%S-') + secrets.token_hex(3)
     slots = matrix(pool, args.x64, args.arm64, args.platform)['include']
+    for slot in slots:
+        runner_labels(args.platform, slot['arch'], args.label_suffix)
     directory = Path(args.state_dir).expanduser()
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     state = {'pool': pool, 'host': args.host, 'target': args.target, 'branch': BRANCH,
-             'x64': args.x64, 'arm64': args.arm64, 'platform': args.platform, 'run_id': None, 'runners': []}
+             'x64': args.x64, 'arm64': args.arm64, 'platform': args.platform,
+             'label_suffix': args.label_suffix, 'run_id': None, 'runners': []}
     path = directory / (pool + '.json')
     path.write_text(json.dumps(state, indent=2))
     gh(f'repos/{args.host}/environments/{pool}', 'PUT', {
@@ -42,7 +45,7 @@ def launch(args):
     for slot in slots:
         name = f'{pool}-{slot["arch"]}-{slot["slot"]}'
         result = gh(f'repos/{args.target}/actions/runners/generate-jitconfig', 'POST', {
-            'name': name, 'runner_group_id': 1, 'labels': runner_labels(args.platform, slot['arch']),
+            'name': name, 'runner_group_id': 1, 'labels': runner_labels(args.platform, slot['arch'], args.label_suffix),
             'work_folder': '_work',
         })
         state['runners'].append({'id': result['runner']['id'], 'name': name, **slot})
@@ -103,6 +106,7 @@ if __name__ == '__main__':
     start.add_argument('--host', required=True)
     start.add_argument('--target', required=True)
     start.add_argument('--platform', choices=PLATFORMS, default='linux')
+    start.add_argument('--label-suffix', choices=['', 'sf'], default='')
     start.add_argument('--x64', type=int, default=1)
     start.add_argument('--arm64', type=int, default=1)
     start.add_argument('--state-dir', default='~/.local/share/temporary-runner-pools')

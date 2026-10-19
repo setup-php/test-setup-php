@@ -55,6 +55,18 @@ class PoolTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             pool.matrix('runner-pool-mac', 0, 1, 'macos-26')
 
+    def test_ubuntu_sf_labels_keep_native_images_and_do_not_take_unsuffixed_jobs(self):
+        items = pool.matrix('runner-pool-sf', 10, 10, 'ubuntu-22.04')['include']
+        self.assertEqual(len(items), 20)
+        for arch, image in [('x64', 'ubuntu-22.04'), ('arm64', 'ubuntu-22.04-arm')]:
+            self.assertEqual(pool.host_spec('ubuntu-22.04', arch)['image'], image)
+            labels = pool.runner_labels('ubuntu-22.04', arch, 'sf')
+            self.assertIn(image + '-sf', labels)
+            self.assertNotIn(image, labels)
+        for platform, suffix in [('ubuntu-24.04', 'sf'), ('macos-15', 'sf'), ('ubuntu-22.04', 'other')]:
+            with self.assertRaises(ValueError):
+                pool.runner_labels(platform, 'x64', suffix)
+
     def test_host_validation_rejects_wrong_deployment_baseline(self):
         pool.validate_host('macos-14', 'arm64', 'Darwin', 'arm64', '14.8.3')
         pool.validate_host('macos-15', 'x64', 'Darwin', 'x86_64', '15.7')

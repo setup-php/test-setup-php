@@ -20,6 +20,10 @@ If GitHub migrates that alias, the host check fails until the expected version
 is reviewed and updated. Named Ubuntu images use Python 3.13 from the tool
 cache, including Ubuntu 22.04 where the system Python lacks required APIs.
 
+For jobs requesting `ubuntu-22.04-sf` or `ubuntu-22.04-arm-sf`, add
+`--label-suffix sf` with `--platform ubuntu-22.04`. These hosts retain the
+native Ubuntu 22.04 images and advertise only the suffixed OS label.
+
 For five macOS 14 ARM64 hosts, use `--platform macos-14 --x64 0 --arm64 5`.
 For macOS 15, use `--platform macos-15` and the desired architecture counts.
 macOS 15 Intel hosts advertise `macos-15-intel`; ARM64 hosts advertise
