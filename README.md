@@ -1,6 +1,6 @@
 # Temporary runner pool
 
-This branch provides disposable Ubuntu 24.04 x64/ARM64, macOS 14 ARM64,
+This branch provides disposable Ubuntu 22.04/24.04/26.04 x64/ARM64, macOS 14 ARM64,
 and macOS 15 Intel/ARM64 runners to a target
 repository. Each host workflow job has a 360-minute timeout, accepts one target
 job, and exits. An unassigned runner exits after 15 minutes. No artifacts or
@@ -11,6 +11,14 @@ From an authenticated local checkout, launch a two-host trial with:
 ```sh
 python3 scripts/dispatch_pool.py launch --host OWNER/HOST --target OWNER/TARGET --x64 1 --arm64 1
 ```
+
+The default `linux` platform selects Ubuntu 24.04. For native compatibility
+tests, select `--platform ubuntu-22.04`, `ubuntu-24.04`, or `ubuntu-26.04`;
+the registered label and checked OS version must match. `ubuntu-latest` is an
+x64-only option for planning/signing jobs, currently checked against 24.04.
+If GitHub migrates that alias, the host check fails until the expected version
+is reviewed and updated. Named Ubuntu images use Python 3.13 from the tool
+cache, including Ubuntu 22.04 where the system Python lacks required APIs.
 
 For five macOS 14 ARM64 hosts, use `--platform macos-14 --x64 0 --arm64 5`.
 For macOS 15, use `--platform macos-15` and the desired architecture counts.

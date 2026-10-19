@@ -23,14 +23,26 @@ MAC_ARCHES = {
     'x64': 'dea7a58796ce215fc424a8b27c0fdd9b813fa5fc03d109a4a1d38131d6bfa1a3',
     'arm64': 'df4cebda25c86a886ed204e49fee63f5c2e7cec5f447b5c98440a826bbdf9df2',
 }
-PLATFORMS = ('linux', 'macos-14', 'macos-15')
+UBUNTU_VERSIONS = {
+    'linux': '24.04',
+    'ubuntu-22.04': '22.04',
+    'ubuntu-24.04': '24.04',
+    'ubuntu-26.04': '26.04',
+    # Fail closed if GitHub migrates this alias to another OS version.
+    'ubuntu-latest': '24.04',
+}
+PLATFORMS = (*UBUNTU_VERSIONS, 'macos-14', 'macos-15')
 
 
 def host_spec(host_platform, arch):
     if arch not in ARCHES or host_platform not in PLATFORMS:
         raise ValueError('Unsupported host platform or architecture')
-    if host_platform == 'linux':
-        return {'label': ARCHES[arch][0], 'checksum': ARCHES[arch][1], 'package': 'linux', 'system': 'Linux'}
+    if host_platform in UBUNTU_VERSIONS:
+        if host_platform == 'ubuntu-latest' and arch != 'x64':
+            raise ValueError('ubuntu-latest supports x64 only; select a numbered ARM64 image')
+        label = 'ubuntu-24.04' if host_platform == 'linux' else host_platform
+        label += '-arm' if arch == 'arm64' else ''
+        return {'label': label, 'checksum': ARCHES[arch][1], 'package': 'linux', 'system': 'Linux'}
     # macos-14 is ARM64 only. Never advertise an OS/architecture alias that
     # would change the target build's deployment baseline.
     if host_platform == 'macos-14' and arch != 'arm64':
@@ -41,9 +53,9 @@ def host_spec(host_platform, arch):
 
 def validate_host(host_platform, arch, system, machine, version):
     host_spec(host_platform, arch)
-    expected_system = 'Linux' if host_platform == 'linux' else 'Darwin'
+    expected_system = 'Linux' if host_platform in UBUNTU_VERSIONS else 'Darwin'
     expected_machine = 'x86_64' if arch == 'x64' else ('aarch64' if system == 'Linux' else 'arm64')
-    expected_version = '24.04' if host_platform == 'linux' else host_platform.split('-')[1]
+    expected_version = UBUNTU_VERSIONS[host_platform] if expected_system == 'Linux' else host_platform.split('-')[1]
     actual_version = version if system == 'Linux' else version.split('.')[0]
     if (system, machine, actual_version) != (expected_system, expected_machine, expected_version):
         raise ValueError('Host does not match the advertised runner label')

@@ -21,6 +21,24 @@ class PoolTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             pool.matrix('production', 1, 1)
 
+    def test_ubuntu_hosts_preserve_native_compatibility_test_baselines(self):
+        for version in ('22.04', '24.04', '26.04'):
+            host = 'ubuntu-' + version
+            items = pool.matrix('runner-pool-ubuntu', 1, 1, host)['include']
+            self.assertEqual([i['os'] for i in items], [host, host + '-arm'])
+            for arch, machine in [('x64', 'x86_64'), ('arm64', 'aarch64')]:
+                pool.validate_host(host, arch, 'Linux', machine, version)
+                for other in ('22.04', '24.04', '26.04'):
+                    if other != version:
+                        with self.assertRaises(ValueError):
+                            pool.validate_host(host, arch, 'Linux', machine, other)
+        self.assertEqual(pool.matrix('runner-pool-approval', 1, 0, 'ubuntu-latest')['include'][0]['os'],
+                         'ubuntu-latest')
+        with self.assertRaises(ValueError):
+            pool.matrix('runner-pool-approval', 0, 1, 'ubuntu-latest')
+        with self.assertRaises(ValueError):
+            pool.validate_host('ubuntu-latest', 'x64', 'Linux', 'x86_64', '26.04')
+
     def test_macos_labels_match_the_actual_os_and_architecture(self):
         items = pool.matrix('runner-pool-mac', 0, 5, 'macos-14')['include']
         self.assertEqual(len(items), 5)

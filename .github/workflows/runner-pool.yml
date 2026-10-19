@@ -22,7 +22,7 @@ on:
         description: Host operating system (must match target job labels)
         default: linux
         type: choice
-        options: [linux, macos-14, macos-15]
+        options: [linux, ubuntu-22.04, ubuntu-24.04, ubuntu-26.04, ubuntu-latest, macos-14, macos-15]
 
 permissions:
   contents: read
@@ -60,7 +60,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Prepare Python outside Homebrew
+      - name: Prepare standalone Python supervisor
         if: matrix.platform != 'linux'
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
