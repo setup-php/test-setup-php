@@ -24,7 +24,7 @@ target repository's runner REST API; they expire after one hour. Long-lived
 administration credentials remain on the dispatching machine.
 
 Dispatch `runner-pool.yml` on `feature/ephemeral-runner-pool` with that environment
-as `pool`, plus `x64-count` and `arm64-count` (1–20 hosts in total). Use small
+as `pool`, plus `x64-count` and `arm64-count` (1–30 hosts in total). Use small
 batches that can start within the token lifetime. Additional jobs require a new
 batch of fresh hosts and tokens. The target workflow must request the matching
 `ubuntu-24.04` or `ubuntu-24.04-arm` label.

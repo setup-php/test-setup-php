@@ -25,8 +25,8 @@ def matrix(pool, x64, arm64):
     if not re.fullmatch(r'runner-pool-[a-z0-9-]{1,60}', pool):
         raise ValueError('Invalid pool environment')
     counts = [int(x64), int(arm64)]
-    if any(n < 0 or n > 20 for n in counts) or not 1 <= sum(counts) <= 20:
-        raise ValueError('Select 1 to 20 runners in total')
+    if any(n < 0 or n > 30 for n in counts) or not 1 <= sum(counts) <= 30:
+        raise ValueError('Select 1 to 30 runners in total')
     return {'include': [
         {'arch': arch, 'os': ARCHES[arch][0], 'slot': str(slot)}
         for arch, count in zip(ARCHES, counts) for slot in range(1, count + 1)

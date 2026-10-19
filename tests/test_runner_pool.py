@@ -14,7 +14,8 @@ class PoolTests(unittest.TestCase):
         self.assertEqual(len({(i['arch'], i['slot']) for i in items}), 3)
 
     def test_capacity_and_environment_are_bounded(self):
-        for counts in [(0, 0), (-1, 2), (20, 1), (1, 'two')]:
+        self.assertEqual(len(pool.matrix('runner-pool-test', 20, 10)['include']), 30)
+        for counts in [(0, 0), (-1, 2), (30, 1), (1, 'two')]:
             with self.assertRaises(ValueError):
                 pool.matrix('runner-pool-test', *counts)
         with self.assertRaises(ValueError):
