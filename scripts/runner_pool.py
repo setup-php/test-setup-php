@@ -19,16 +19,45 @@ ARCHES = {
     'x64': ('ubuntu-24.04', 'af4b794c1bc41d73d40535e3fe092a39f9679cd8d965954c2aca25a05ca41d32'),
     'arm64': ('ubuntu-24.04-arm', '628b4a7258487b80c1d3c221095a7ded349f5ae0175fd3dfab708d07428f041b'),
 }
+MAC_ARCHES = {
+    'x64': 'dea7a58796ce215fc424a8b27c0fdd9b813fa5fc03d109a4a1d38131d6bfa1a3',
+    'arm64': 'df4cebda25c86a886ed204e49fee63f5c2e7cec5f447b5c98440a826bbdf9df2',
+}
+PLATFORMS = ('linux', 'macos-14', 'macos-15')
 
 
-def matrix(pool, x64, arm64):
+def host_spec(host_platform, arch):
+    if arch not in ARCHES or host_platform not in PLATFORMS:
+        raise ValueError('Unsupported host platform or architecture')
+    if host_platform == 'linux':
+        return {'label': ARCHES[arch][0], 'checksum': ARCHES[arch][1], 'package': 'linux', 'system': 'Linux'}
+    # macos-14 is ARM64 only. Never advertise an OS/architecture alias that
+    # would change the target build's deployment baseline.
+    if host_platform == 'macos-14' and arch != 'arm64':
+        raise ValueError('macOS 14 hosts support ARM64 only')
+    label = host_platform + ('-intel' if arch == 'x64' else '')
+    return {'label': label, 'checksum': MAC_ARCHES[arch], 'package': 'osx', 'system': 'macOS'}
+
+
+def validate_host(host_platform, arch, system, machine, version):
+    host_spec(host_platform, arch)
+    expected_system = 'Linux' if host_platform == 'linux' else 'Darwin'
+    expected_machine = 'x86_64' if arch == 'x64' else ('aarch64' if system == 'Linux' else 'arm64')
+    expected_version = '24.04' if host_platform == 'linux' else host_platform.split('-')[1]
+    actual_version = version if system == 'Linux' else version.split('.')[0]
+    if (system, machine, actual_version) != (expected_system, expected_machine, expected_version):
+        raise ValueError('Host does not match the advertised runner label')
+
+
+def matrix(pool, x64, arm64, host_platform='linux'):
     if not re.fullmatch(r'runner-pool-[a-z0-9-]{1,60}', pool):
         raise ValueError('Invalid pool environment')
     counts = [int(x64), int(arm64)]
     if any(n < 0 or n > 30 for n in counts) or not 1 <= sum(counts) <= 30:
         raise ValueError('Select 1 to 30 runners in total')
     return {'include': [
-        {'arch': arch, 'os': ARCHES[arch][0], 'slot': str(slot), 'secret': f'RUNNER_JIT_{arch.upper()}_{slot}'}
+        {'arch': arch, 'os': host_spec(host_platform, arch)['label'], 'platform': host_platform,
+         'slot': str(slot), 'secret': f'RUNNER_JIT_{arch.upper()}_{slot}'}
         for arch, count in zip(ARCHES, counts) for slot in range(1, count + 1)
     ]}
 
@@ -40,14 +69,15 @@ def child_environment(parent):
     return {key: parent[key] for key in allowed if key in parent}
 
 
-def download_runner(directory, arch):
+def download_runner(directory, arch, host_platform='linux'):
+    spec = host_spec(host_platform, arch)
     archive = directory / 'runner.tar.gz'
-    url = f'https://github.com/actions/runner/releases/download/v{VERSION}/actions-runner-linux-{arch}-{VERSION}.tar.gz'
+    url = f'https://github.com/actions/runner/releases/download/v{VERSION}/actions-runner-{spec["package"]}-{arch}-{VERSION}.tar.gz'
     with urllib.request.urlopen(url, timeout=120) as response, archive.open('wb') as output:
         shutil.copyfileobj(response, output)
     with archive.open('rb') as downloaded:
         checksum = hashlib.file_digest(downloaded, 'sha256').hexdigest()
-    if checksum != ARCHES[arch][1]:
+    if checksum != spec['checksum']:
         raise RuntimeError('Runner archive verification failed')
     with tarfile.open(archive) as package:
         package.extractall(directory, filter='data')
@@ -76,14 +106,14 @@ def serve():
     jit = os.environ.pop('RUNNER_JIT_CONFIG')
     arch = os.environ.pop('POOL_ARCH')
     slot = os.environ.pop('POOL_SLOT')
+    host_platform = os.environ.pop('POOL_PLATFORM', 'linux')
     if not re.fullmatch(r'[A-Za-z0-9+/=]+', jit):
         raise ValueError('Missing or invalid single-runner configuration')
     if arch not in ARCHES or not re.fullmatch(r'[1-9][0-9]?', slot):
         raise ValueError('Invalid runner slot')
-    machine = {'x64': 'x86_64', 'arm64': 'aarch64'}[arch]
-    release = Path('/etc/os-release').read_text()
-    if platform.machine() != machine or 'VERSION_ID="24.04"' not in release:
-        raise ValueError('Host does not match the advertised runner label')
+    system = platform.system()
+    version = platform.freedesktop_os_release()['VERSION_ID'] if system == 'Linux' else platform.mac_ver()[0]
+    validate_host(host_platform, arch, system, platform.machine(), version)
     env = child_environment(os.environ)
     process = None
     directory = Path(tempfile.mkdtemp(prefix='temporary-runner-', dir=os.environ['RUNNER_TEMP']))
@@ -92,7 +122,7 @@ def serve():
     signal.signal(signal.SIGTERM, interrupted)
     signal.signal(signal.SIGINT, interrupted)
     try:
-        download_runner(directory, arch)
+        download_runner(directory, arch, host_platform)
         print('Pinned runner download verified.', flush=True)
         with (directory / 'host.log').open('wb') as log:
             # Runner diagnostics and console output stay on this disposable VM.
@@ -130,7 +160,8 @@ def serve():
 if __name__ == '__main__':
     try:
         if sys.argv[1:] == ['matrix']:
-            result = matrix(os.environ['POOL'], os.environ['X64_COUNT'], os.environ['ARM64_COUNT'])
+            result = matrix(os.environ['POOL'], os.environ['X64_COUNT'], os.environ['ARM64_COUNT'],
+                            os.environ.get('POOL_PLATFORM', 'linux'))
             with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
                 output.write('matrix=' + json.dumps(result, separators=(',', ':')) + '\n')
         elif sys.argv[1:] == ['serve']:

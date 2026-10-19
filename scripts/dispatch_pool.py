@@ -8,7 +8,7 @@ import secrets
 import subprocess
 import time
 
-from runner_pool import ARCHES, matrix
+from runner_pool import PLATFORMS, host_spec, matrix
 
 BRANCH = 'feature/ephemeral-runner-pool'
 
@@ -26,11 +26,11 @@ def gh(path, method='GET', data=None):
 
 def launch(args):
     pool = 'runner-pool-' + datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d-%H%M%S-') + secrets.token_hex(3)
-    slots = matrix(pool, args.x64, args.arm64)['include']
+    slots = matrix(pool, args.x64, args.arm64, args.platform)['include']
     directory = Path(args.state_dir).expanduser()
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     state = {'pool': pool, 'host': args.host, 'target': args.target, 'branch': BRANCH,
-             'x64': args.x64, 'arm64': args.arm64, 'run_id': None, 'runners': []}
+             'x64': args.x64, 'arm64': args.arm64, 'platform': args.platform, 'run_id': None, 'runners': []}
     path = directory / (pool + '.json')
     path.write_text(json.dumps(state, indent=2))
     gh(f'repos/{args.host}/environments/{pool}', 'PUT', {
@@ -40,10 +40,11 @@ def launch(args):
     subprocess.run(['gh', 'secret', 'set', 'RUNNER_TARGET_REPOSITORY', '-R', args.host, '--env', pool],
                    input=args.target.encode(), stdout=subprocess.DEVNULL, check=True)
     for slot in slots:
+        spec = host_spec(args.platform, slot['arch'])
         name = f'{pool}-{slot["arch"]}-{slot["slot"]}'
         result = gh(f'repos/{args.target}/actions/runners/generate-jitconfig', 'POST', {
-            'name': name, 'runner_group_id': 1, 'labels': ['self-hosted', 'Linux',
-                'X64' if slot['arch'] == 'x64' else 'ARM64', ARCHES[slot['arch']][0]], 'work_folder': '_work',
+            'name': name, 'runner_group_id': 1, 'labels': ['self-hosted', spec['system'],
+                'X64' if slot['arch'] == 'x64' else 'ARM64', spec['label']], 'work_folder': '_work',
         })
         state['runners'].append({'id': result['runner']['id'], 'name': name, **slot})
         path.write_text(json.dumps(state, indent=2))
@@ -51,7 +52,8 @@ def launch(args):
                        input=result['encoded_jit_config'].encode(), stdout=subprocess.DEVNULL, check=True)
         del result
     gh(f'repos/{args.host}/actions/workflows/runner-pool.yml/dispatches', 'POST', {
-        'ref': BRANCH, 'inputs': {'pool': pool, 'x64-count': str(args.x64), 'arm64-count': str(args.arm64)},
+        'ref': BRANCH, 'inputs': {'pool': pool, 'x64-count': str(args.x64), 'arm64-count': str(args.arm64),
+                                'platform': args.platform},
     })
     for _ in range(30):
         runs = gh(f'repos/{args.host}/actions/workflows/runner-pool.yml/runs?per_page=30')['workflow_runs']
@@ -59,7 +61,8 @@ def launch(args):
         if match:
             state['run_id'] = match['id']
             path.write_text(json.dumps(state, indent=2))
-            print(json.dumps({'state': str(path), 'url': match['html_url'], 'x64': args.x64, 'arm64': args.arm64}))
+            print(json.dumps({'state': str(path), 'url': match['html_url'], 'x64': args.x64, 'arm64': args.arm64,
+                              'platform': args.platform}))
             return
         time.sleep(2)
     raise RuntimeError('Dispatch accepted; run not visible yet. Recover its ID using the saved pool name.')
@@ -100,6 +103,7 @@ if __name__ == '__main__':
     start = commands.add_parser('launch')
     start.add_argument('--host', required=True)
     start.add_argument('--target', required=True)
+    start.add_argument('--platform', choices=PLATFORMS, default='linux')
     start.add_argument('--x64', type=int, default=1)
     start.add_argument('--arm64', type=int, default=1)
     start.add_argument('--state-dir', default='~/.local/share/temporary-runner-pools')

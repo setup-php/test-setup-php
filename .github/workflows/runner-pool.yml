@@ -11,13 +11,18 @@ on:
         required: true
         type: string
       x64-count:
-        description: Ubuntu 24.04 x64 runners
+        description: x64 runners (Linux or macOS 15 Intel)
         default: '1'
         type: string
       arm64-count:
-        description: Ubuntu 24.04 ARM64 runners
+        description: ARM64 runners
         default: '1'
         type: string
+      platform:
+        description: Host operating system (must match target job labels)
+        default: linux
+        type: choice
+        options: [linux, macos-14, macos-15]
 
 permissions:
   contents: read
@@ -38,6 +43,7 @@ jobs:
           POOL: ${{ inputs.pool }}
           X64_COUNT: ${{ inputs.x64-count }}
           ARM64_COUNT: ${{ inputs.arm64-count }}
+          POOL_PLATFORM: ${{ inputs.platform }}
         run: python3 scripts/runner_pool.py matrix
 
   runner:
@@ -54,9 +60,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Prepare Python outside Homebrew
+        if: matrix.platform != 'linux'
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
       - name: Serve one job with a temporary runner
         env:
           RUNNER_JIT_CONFIG: ${{ secrets[matrix.secret] }}
           POOL_ARCH: ${{ matrix.arch }}
           POOL_SLOT: ${{ matrix.slot }}
+          POOL_PLATFORM: ${{ matrix.platform }}
         run: python3 scripts/runner_pool.py serve
