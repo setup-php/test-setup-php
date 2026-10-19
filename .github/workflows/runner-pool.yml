@@ -56,9 +56,7 @@ jobs:
           persist-credentials: false
       - name: Serve one job with a temporary runner
         env:
-          RUNNER_TARGET_REPOSITORY: ${{ secrets.RUNNER_TARGET_REPOSITORY }}
-          RUNNER_REGISTRATION_TOKEN: ${{ secrets.RUNNER_REGISTRATION_TOKEN }}
-          RUNNER_REMOVAL_TOKEN: ${{ secrets.RUNNER_REMOVAL_TOKEN }}
+          RUNNER_JIT_CONFIG: ${{ secrets[matrix.secret] }}
           POOL_ARCH: ${{ matrix.arch }}
           POOL_SLOT: ${{ matrix.slot }}
         run: python3 scripts/runner_pool.py serve

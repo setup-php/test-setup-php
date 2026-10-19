@@ -28,7 +28,7 @@ def matrix(pool, x64, arm64):
     if any(n < 0 or n > 30 for n in counts) or not 1 <= sum(counts) <= 30:
         raise ValueError('Select 1 to 30 runners in total')
     return {'include': [
-        {'arch': arch, 'os': ARCHES[arch][0], 'slot': str(slot)}
+        {'arch': arch, 'os': ARCHES[arch][0], 'slot': str(slot), 'secret': f'RUNNER_JIT_{arch.upper()}_{slot}'}
         for arch, count in zip(ARCHES, counts) for slot in range(1, count + 1)
     ]}
 
@@ -73,20 +73,17 @@ def stop(process):
 
 def serve():
     os.umask(0o077)
-    repository = os.environ.pop('RUNNER_TARGET_REPOSITORY')
-    registration = os.environ.pop('RUNNER_REGISTRATION_TOKEN')
-    removal = os.environ.pop('RUNNER_REMOVAL_TOKEN')
+    jit = os.environ.pop('RUNNER_JIT_CONFIG')
     arch = os.environ.pop('POOL_ARCH')
     slot = os.environ.pop('POOL_SLOT')
-    if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repository) or not registration or not removal:
-        raise ValueError('Missing or invalid registration secrets')
+    if not re.fullmatch(r'[A-Za-z0-9+/=]+', jit):
+        raise ValueError('Missing or invalid single-runner configuration')
     if arch not in ARCHES or not re.fullmatch(r'[1-9][0-9]?', slot):
         raise ValueError('Invalid runner slot')
     machine = {'x64': 'x86_64', 'arm64': 'aarch64'}[arch]
     release = Path('/etc/os-release').read_text()
     if platform.machine() != machine or 'VERSION_ID="24.04"' not in release:
         raise ValueError('Host does not match the advertised runner label')
-    name = f'pool-{os.environ["GITHUB_RUN_ID"]}-{os.environ["GITHUB_RUN_ATTEMPT"]}-{arch}-{slot}'
     env = child_environment(os.environ)
     process = None
     directory = Path(tempfile.mkdtemp(prefix='temporary-runner-', dir=os.environ['RUNNER_TEMP']))
@@ -100,15 +97,12 @@ def serve():
         with (directory / 'host.log').open('wb') as log:
             # Runner diagnostics and console output stay on this disposable VM.
             # The target workflow controls its own logs and package storage.
-            subprocess.run([
-                './config.sh', '--unattended', '--ephemeral', '--disableupdate',
-                '--url', 'https://github.com/' + repository, '--token', registration,
-                '--name', name, '--labels', ARCHES[arch][0], '--work', '_work',
-            ], cwd=directory, env=env, stdout=log, stderr=log, check=True, timeout=120)
-            registration = ''
-            print('Temporary runner registered; waiting for one job.', flush=True)
-            process = subprocess.Popen(['./run.sh'], cwd=directory, env=env,
+            # A JIT credential can start only this pre-registered, one-job
+            # runner. It cannot register additional runners for the repository.
+            print('Starting temporary runner for one job.', flush=True)
+            process = subprocess.Popen(['./run.sh', '--jitconfig', jit], cwd=directory, env=env,
                                        stdout=log, stderr=log, start_new_session=True)
+            jit = ''
             started = time.monotonic()
             assigned = False
             while process.poll() is None:
@@ -126,15 +120,8 @@ def serve():
             print('Temporary runner finished its job.', flush=True)
     finally:
         stop(process)
-        # Ephemeral runners remove themselves after their job. This also
-        # handles idle cancellation while the one-hour removal token is valid.
-        if (directory / '.runner').exists():
-            try:
-                subprocess.run(['./config.sh', 'remove', '--unattended', '--token', removal],
-                               cwd=directory, env=env, stdout=subprocess.DEVNULL,
-                               stderr=subprocess.DEVNULL, timeout=30, check=False)
-            except (OSError, subprocess.TimeoutExpired):
-                pass
+        # Successful JIT runners deregister themselves. External cleanup uses
+        # local admin credentials for interrupted/unassigned registrations.
         # Container workspaces can contain root-owned files; destroy only our
         # dedicated temporary tree, never the parent runner workspace.
         subprocess.run(['sudo', 'rm', '-rf', '--', str(directory)], check=False)

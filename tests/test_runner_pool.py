@@ -25,7 +25,7 @@ class PoolTests(unittest.TestCase):
         parent = dict(HOME='/home/runner', PATH='/bin', USER='runner',
                       GITHUB_TOKEN='secret', GH_TOKEN='secret', GITHUB_REPOSITORY='host/repository',
                       ACTIONS_RUNTIME_TOKEN='secret', RUNNER_TRACKING_ID='parent',
-                      RUNNER_REGISTRATION_TOKEN='secret', RUNNER_REMOVAL_TOKEN='secret',
+                      RUNNER_JIT_CONFIG='secret',
                       GITHUB_ENV='/parent/env', GITHUB_OUTPUT='/parent/output')
         self.assertEqual(pool.child_environment(parent),
                          {'HOME': '/home/runner', 'PATH': '/bin', 'USER': 'runner'})
