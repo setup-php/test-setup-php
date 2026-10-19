@@ -56,14 +56,15 @@ class PoolTests(unittest.TestCase):
             pool.matrix('runner-pool-mac', 0, 1, 'macos-26')
 
     def test_ubuntu_sf_labels_keep_native_images_and_do_not_take_unsuffixed_jobs(self):
-        items = pool.matrix('runner-pool-sf', 10, 10, 'ubuntu-22.04')['include']
+        items = pool.matrix('runner-pool-sf', 10, 10, 'ubuntu-24.04')['include']
         self.assertEqual(len(items), 20)
-        for arch, image in [('x64', 'ubuntu-22.04'), ('arm64', 'ubuntu-22.04-arm')]:
-            self.assertEqual(pool.host_spec('ubuntu-22.04', arch)['image'], image)
-            labels = pool.runner_labels('ubuntu-22.04', arch, 'sf')
-            self.assertIn(image + '-sf', labels)
+        for arch, image, label in [('x64', 'ubuntu-24.04', 'ubuntu-24-sf'),
+                                   ('arm64', 'ubuntu-24.04-arm', 'ubuntu-24-arm-sf')]:
+            self.assertEqual(pool.host_spec('ubuntu-24.04', arch)['image'], image)
+            labels = pool.runner_labels('ubuntu-24.04', arch, 'sf')
+            self.assertEqual(labels, ['self-hosted', 'Linux', 'X64' if arch == 'x64' else 'ARM64', label])
             self.assertNotIn(image, labels)
-        for platform, suffix in [('ubuntu-24.04', 'sf'), ('macos-15', 'sf'), ('ubuntu-22.04', 'other')]:
+        for platform, suffix in [('ubuntu-22.04', 'sf'), ('macos-15', 'sf'), ('ubuntu-24.04', 'other')]:
             with self.assertRaises(ValueError):
                 pool.runner_labels(platform, 'x64', suffix)
 

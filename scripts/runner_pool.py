@@ -63,9 +63,10 @@ def host_spec(host_platform, arch):
 
 def runner_labels(host_platform, arch, label_suffix=''):
     spec = host_spec(host_platform, arch)
-    if label_suffix and (label_suffix != 'sf' or host_platform != 'ubuntu-22.04'):
-        raise ValueError('The sf label suffix requires native Ubuntu 22.04')
-    label = spec['label'] + ('-' + label_suffix if label_suffix else '')
+    if label_suffix and (label_suffix != 'sf' or host_platform != 'ubuntu-24.04'):
+        raise ValueError('The sf label suffix requires native Ubuntu 24.04')
+    label = ('ubuntu-24' + ('-arm' if arch == 'arm64' else '') + '-sf'
+             if label_suffix else spec['label'])
     return ['self-hosted', spec['system'], 'X64' if arch == 'x64' else 'ARM64',
             label, *spec.get('additional_labels', [])]
 
