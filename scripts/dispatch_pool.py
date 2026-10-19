@@ -8,7 +8,7 @@ import secrets
 import subprocess
 import time
 
-from runner_pool import PLATFORMS, host_spec, matrix
+from runner_pool import PLATFORMS, matrix, runner_labels
 
 BRANCH = 'feature/ephemeral-runner-pool'
 
@@ -40,11 +40,10 @@ def launch(args):
     subprocess.run(['gh', 'secret', 'set', 'RUNNER_TARGET_REPOSITORY', '-R', args.host, '--env', pool],
                    input=args.target.encode(), stdout=subprocess.DEVNULL, check=True)
     for slot in slots:
-        spec = host_spec(args.platform, slot['arch'])
         name = f'{pool}-{slot["arch"]}-{slot["slot"]}'
         result = gh(f'repos/{args.target}/actions/runners/generate-jitconfig', 'POST', {
-            'name': name, 'runner_group_id': 1, 'labels': ['self-hosted', spec['system'],
-                'X64' if slot['arch'] == 'x64' else 'ARM64', spec['label']], 'work_folder': '_work',
+            'name': name, 'runner_group_id': 1, 'labels': runner_labels(args.platform, slot['arch']),
+            'work_folder': '_work',
         })
         state['runners'].append({'id': result['runner']['id'], 'name': name, **slot})
         path.write_text(json.dumps(state, indent=2))

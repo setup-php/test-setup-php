@@ -61,6 +61,20 @@ class PoolTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 pool.validate_host('macos-14', 'arm64', *host)
 
+    def test_mac_arm_aliases_match_native_images_and_target_job_labels(self):
+        for profile, image, major in [('macos-15-arm64', 'macos-15', '15'),
+                                      ('macos-26-arm', 'macos-26', '26')]:
+            item = pool.matrix('runner-pool-mac', 0, 1, profile)['include'][0]
+            self.assertEqual(item['os'], image)
+            labels = pool.runner_labels(profile, 'arm64')
+            self.assertTrue({'self-hosted', 'macOS', 'ARM64', profile}.issubset(labels))
+            pool.validate_host(profile, 'arm64', 'Darwin', 'arm64', major + '.1')
+            with self.assertRaises(ValueError):
+                pool.matrix('runner-pool-mac', 1, 0, profile)
+            with self.assertRaises(ValueError):
+                pool.validate_host(profile, 'arm64', 'Darwin', 'arm64', '14.8')
+        self.assertIn('macos-26-arm64', pool.runner_labels('macos-26-arm', 'arm64'))
+
     def test_parent_credentials_and_context_cannot_reach_child(self):
         parent = dict(HOME='/home/runner', PATH='/bin', USER='runner',
                       GITHUB_TOKEN='secret', GH_TOKEN='secret', GITHUB_REPOSITORY='host/repository',

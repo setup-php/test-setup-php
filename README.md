@@ -1,7 +1,7 @@
 # Temporary runner pool
 
 This branch provides disposable Ubuntu 22.04/24.04/26.04 x64/ARM64, macOS 14 ARM64,
-and macOS 15 Intel/ARM64 runners to a target
+macOS 15 Intel/ARM64, and macOS 26 ARM64 runners to a target
 repository. Each host workflow job has a 360-minute timeout, accepts one target
 job, and exits. An unassigned runner exits after 15 minutes. No artifacts or
 caches are uploaded by the host workflow.
@@ -23,9 +23,15 @@ cache, including Ubuntu 22.04 where the system Python lacks required APIs.
 For five macOS 14 ARM64 hosts, use `--platform macos-14 --x64 0 --arm64 5`.
 For macOS 15, use `--platform macos-15` and the desired architecture counts.
 macOS 15 Intel hosts advertise `macos-15-intel`; ARM64 hosts advertise
-`macos-14` or `macos-15` matching their real OS. No alternate OS labels are
-registered. macOS uses a Python runtime outside Homebrew so target cleanup
+`macos-14` or `macos-15` matching their real OS. No labels for a different OS
+version are registered. macOS uses a Python runtime outside Homebrew so target cleanup
 cannot remove the parent runner supervisor.
+
+For target workflows requesting ARM-specific aliases, use `--platform
+macos-15-arm64 --x64 0 --arm64 N` or `--platform macos-26-arm --x64 0 --arm64 N`.
+These run on native `macos-15` and `macos-26` hosted images respectively.
+The macOS 26 profile registers both `macos-26-arm` and `macos-26-arm64`.
+Both profiles reject Intel and check the actual macOS major version.
 
 The helper creates a unique environment restricted to this branch, saves the
 target and per-runner JIT configurations as environment secrets, dispatches the batch,

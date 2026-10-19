@@ -31,7 +31,11 @@ UBUNTU_VERSIONS = {
     # Fail closed if GitHub migrates this alias to another OS version.
     'ubuntu-latest': '24.04',
 }
-PLATFORMS = (*UBUNTU_VERSIONS, 'macos-14', 'macos-15')
+MAC_ARM_PROFILES = {
+    'macos-15-arm64': ('macos-15', []),
+    'macos-26-arm': ('macos-26', ['macos-26-arm64']),
+}
+PLATFORMS = (*UBUNTU_VERSIONS, 'macos-14', 'macos-15', *MAC_ARM_PROFILES)
 
 
 def host_spec(host_platform, arch):
@@ -42,13 +46,25 @@ def host_spec(host_platform, arch):
             raise ValueError('ubuntu-latest supports x64 only; select a numbered ARM64 image')
         label = 'ubuntu-24.04' if host_platform == 'linux' else host_platform
         label += '-arm' if arch == 'arm64' else ''
-        return {'label': label, 'checksum': ARCHES[arch][1], 'package': 'linux', 'system': 'Linux'}
+        return {'label': label, 'image': label, 'checksum': ARCHES[arch][1], 'package': 'linux', 'system': 'Linux'}
+    if host_platform in MAC_ARM_PROFILES:
+        if arch != 'arm64':
+            raise ValueError('This macOS runner label requires ARM64')
+        image, additional_labels = MAC_ARM_PROFILES[host_platform]
+        return {'label': host_platform, 'image': image, 'additional_labels': additional_labels,
+                'checksum': MAC_ARCHES[arch], 'package': 'osx', 'system': 'macOS'}
     # macos-14 is ARM64 only. Never advertise an OS/architecture alias that
     # would change the target build's deployment baseline.
     if host_platform == 'macos-14' and arch != 'arm64':
         raise ValueError('macOS 14 hosts support ARM64 only')
     label = host_platform + ('-intel' if arch == 'x64' else '')
-    return {'label': label, 'checksum': MAC_ARCHES[arch], 'package': 'osx', 'system': 'macOS'}
+    return {'label': label, 'image': label, 'checksum': MAC_ARCHES[arch], 'package': 'osx', 'system': 'macOS'}
+
+
+def runner_labels(host_platform, arch):
+    spec = host_spec(host_platform, arch)
+    return ['self-hosted', spec['system'], 'X64' if arch == 'x64' else 'ARM64',
+            spec['label'], *spec.get('additional_labels', [])]
 
 
 def validate_host(host_platform, arch, system, machine, version):
@@ -68,7 +84,8 @@ def matrix(pool, x64, arm64, host_platform='linux'):
     if any(n < 0 or n > 30 for n in counts) or not 1 <= sum(counts) <= 30:
         raise ValueError('Select 1 to 30 runners in total')
     return {'include': [
-        {'arch': arch, 'os': host_spec(host_platform, arch)['label'], 'platform': host_platform,
+        {'arch': arch, 'os': host_spec(host_platform, arch)['image'],
+         'platform': host_platform,
          'slot': str(slot), 'secret': f'RUNNER_JIT_{arch.upper()}_{slot}'}
         for arch, count in zip(ARCHES, counts) for slot in range(1, count + 1)
     ]}
