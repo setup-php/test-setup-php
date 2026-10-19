@@ -1,0 +1,64 @@
+name: Temporary runner pool
+run-name: Runner pool ${{ inputs.pool || 'validation' }}
+
+on:
+  push:
+    branches: [feature/ephemeral-runner-pool]
+  workflow_dispatch:
+    inputs:
+      pool:
+        description: Prepared environment containing temporary registration secrets
+        required: true
+        type: string
+      x64-count:
+        description: Ubuntu 24.04 x64 runners
+        default: '1'
+        type: string
+      arm64-count:
+        description: Ubuntu 24.04 ARM64 runners
+        default: '1'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: python3 -m unittest discover -s tests -v
+      - id: matrix
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          POOL: ${{ inputs.pool }}
+          X64_COUNT: ${{ inputs.x64-count }}
+          ARM64_COUNT: ${{ inputs.arm64-count }}
+        run: python3 scripts/runner_pool.py matrix
+
+  runner:
+    if: github.event_name == 'workflow_dispatch'
+    needs: validate
+    name: Runner ${{ matrix.arch }}-${{ matrix.slot }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 360
+    environment: ${{ inputs.pool }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.validate.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Serve one job with a temporary runner
+        env:
+          RUNNER_TARGET_REPOSITORY: ${{ secrets.RUNNER_TARGET_REPOSITORY }}
+          RUNNER_REGISTRATION_TOKEN: ${{ secrets.RUNNER_REGISTRATION_TOKEN }}
+          RUNNER_REMOVAL_TOKEN: ${{ secrets.RUNNER_REMOVAL_TOKEN }}
+          POOL_ARCH: ${{ matrix.arch }}
+          POOL_SLOT: ${{ matrix.slot }}
+        run: python3 scripts/runner_pool.py serve
