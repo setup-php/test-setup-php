@@ -98,6 +98,13 @@ def child_environment(parent):
     return {key: parent[key] for key in allowed if key in parent}
 
 
+def start_runner(directory, jit, env, log):
+    # Keep the supervisor's directory and diagnostics private, while matching
+    # normal hosted-runner permissions for checkouts and generated packages.
+    return subprocess.Popen(['./run.sh', '--jitconfig', jit], cwd=directory, env=env,
+                            stdout=log, stderr=log, start_new_session=True, umask=0o022)
+
+
 def download_runner(directory, arch, host_platform='linux'):
     spec = host_spec(host_platform, arch)
     archive = directory / 'runner.tar.gz'
@@ -159,8 +166,7 @@ def serve():
             # A JIT credential can start only this pre-registered, one-job
             # runner. It cannot register additional runners for the repository.
             print('Starting temporary runner for one job.', flush=True)
-            process = subprocess.Popen(['./run.sh', '--jitconfig', jit], cwd=directory, env=env,
-                                       stdout=log, stderr=log, start_new_session=True)
+            process = start_runner(directory, jit, env, log)
             jit = ''
             started = time.monotonic()
             assigned = False

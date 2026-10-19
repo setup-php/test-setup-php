@@ -1,5 +1,8 @@
 import importlib.util
+import os
 from pathlib import Path
+import stat
+import tempfile
 import unittest
 
 spec = importlib.util.spec_from_file_location('runner_pool', Path(__file__).parents[1] / 'scripts/runner_pool.py')
@@ -83,6 +86,33 @@ class PoolTests(unittest.TestCase):
                       GITHUB_ENV='/parent/env', GITHUB_OUTPUT='/parent/output')
         self.assertEqual(pool.child_environment(parent),
                          {'HOME': '/home/runner', 'PATH': '/bin', 'USER': 'runner'})
+
+    def test_child_creates_readable_formulae_without_exposing_host_diagnostics(self):
+        previous = os.umask(0o077)
+        try:
+            with tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary)
+                script = directory / 'run.sh'
+                script.write_text('#!/bin/sh\nset -eu\nmkdir checkout\n'
+                                  'printf "class Formula\\n" > checkout/formula.rb\n'
+                                  'printf "private target output\\n"\n')
+                script.chmod(0o700)
+                log_path = directory / 'host.log'
+                with log_path.open('wb') as log:
+                    process = pool.start_runner(directory, 'dummy', pool.child_environment(os.environ), log)
+                    self.assertEqual(process.wait(timeout=10), 0)
+                # A restrictive inherited mask makes Homebrew reject formulae
+                # with mode 600. The parent must still create private files.
+                self.assertEqual(stat.S_IMODE((directory / 'checkout/formula.rb').stat().st_mode), 0o644)
+                self.assertEqual(stat.S_IMODE((directory / 'checkout').stat().st_mode), 0o755)
+                self.assertEqual(stat.S_IMODE(directory.stat().st_mode), 0o700)
+                self.assertEqual(stat.S_IMODE(log_path.stat().st_mode), 0o600)
+                self.assertEqual(log_path.read_text(), 'private target output\n')
+                probe = directory / 'parent-file'
+                probe.write_text('private')
+                self.assertEqual(stat.S_IMODE(probe.stat().st_mode), 0o600)
+        finally:
+            os.umask(previous)
 
 
 if __name__ == '__main__':
