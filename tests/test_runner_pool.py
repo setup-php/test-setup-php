@@ -53,7 +53,7 @@ class PoolTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             pool.matrix('runner-pool-mac', 1, 0, 'macos-14')
         with self.assertRaises(ValueError):
-            pool.matrix('runner-pool-mac', 0, 1, 'macos-26')
+            pool.matrix('runner-pool-mac', 0, 1, 'macos-27')
 
     def test_ubuntu_sf_labels_keep_native_images_and_do_not_take_unsuffixed_jobs(self):
         items = pool.matrix('runner-pool-sf', 10, 10, 'ubuntu-24.04')['include']
@@ -79,7 +79,8 @@ class PoolTests(unittest.TestCase):
 
     def test_mac_arm_aliases_match_native_images_and_target_job_labels(self):
         for profile, image, major in [('macos-15-arm64', 'macos-15', '15'),
-                                      ('macos-26-arm', 'macos-26', '26')]:
+                                      ('macos-26-arm', 'macos-26', '26'),
+                                      ('macos-26', 'macos-26', '26')]:
             item = pool.matrix('runner-pool-mac', 0, 1, profile)['include'][0]
             self.assertEqual(item['os'], image)
             labels = pool.runner_labels(profile, 'arm64')

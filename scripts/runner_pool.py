@@ -32,6 +32,7 @@ UBUNTU_VERSIONS = {
     'ubuntu-latest': '24.04',
 }
 MAC_ARM_PROFILES = {
+    'macos-26': ('macos-26', []),
     'macos-15-arm64': ('macos-15', []),
     'macos-26-arm': ('macos-26', ['macos-26-arm64']),
 }
