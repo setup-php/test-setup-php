@@ -11,7 +11,7 @@ on:
         required: true
         type: string
       x64-count:
-        description: x64 runners (Linux or macOS 15 Intel)
+        description: x64 runners (Linux, Windows 2022, or macOS 15 Intel)
         default: '1'
         type: string
       arm64-count:
@@ -22,7 +22,7 @@ on:
         description: Host operating system (must match target job labels)
         default: linux
         type: choice
-        options: [linux, ubuntu-22.04, ubuntu-24.04, ubuntu-26.04, ubuntu-latest, macos-14, macos-15, macos-26, macos-15-arm64, macos-26-arm]
+        options: [linux, ubuntu-22.04, ubuntu-24.04, ubuntu-26.04, ubuntu-latest, macos-14, macos-15, macos-26, macos-15-arm64, macos-26-arm, windows-2022]
 
 permissions:
   contents: read
@@ -71,4 +71,4 @@ jobs:
           POOL_ARCH: ${{ matrix.arch }}
           POOL_SLOT: ${{ matrix.slot }}
           POOL_PLATFORM: ${{ matrix.platform }}
-        run: python3 scripts/runner_pool.py serve
+        run: python scripts/runner_pool.py serve

@@ -1,7 +1,7 @@
 # Temporary runner pool
 
 This branch provides disposable Ubuntu 22.04/24.04/26.04 x64/ARM64, macOS 14 ARM64,
-macOS 15 Intel/ARM64, and macOS 26 ARM64 runners to a target
+macOS 15 Intel/ARM64, macOS 26 ARM64, and Windows Server 2022 x64 runners to a target
 repository. Each host workflow job has a 360-minute timeout, accepts one target
 job, and exits. An unassigned runner exits after 15 minutes. No artifacts or
 caches are uploaded by the host workflow.
@@ -66,3 +66,10 @@ Interrupted or unused registrations require this external cleanup.
 
 The hosting account's Actions concurrency limits still apply. Use only for
 trusted workflows in the target repository.
+
+For Windows Server 2022 capacity, use `--platform windows-2022 --x64 N --arm64 0`.
+These hosts advertise `windows-2022-sf` and validate the native Windows 20348
+build and x64 architecture before registering. `--label-suffix sf` is accepted
+explicitly and produces the same label. Windows uses the pinned, checksum-verified
+runner ZIP, preserves only the required operating-system environment, restricts
+its temporary directory ACL, and removes that directory after serving one job.

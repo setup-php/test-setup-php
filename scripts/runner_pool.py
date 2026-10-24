@@ -13,6 +13,7 @@ import tarfile
 import tempfile
 import time
 import urllib.request
+import zipfile
 
 VERSION = '2.338.0'
 ARCHES = {
@@ -36,12 +37,18 @@ MAC_ARM_PROFILES = {
     'macos-15-arm64': ('macos-15', []),
     'macos-26-arm': ('macos-26', ['macos-26-arm64']),
 }
-PLATFORMS = (*UBUNTU_VERSIONS, 'macos-14', 'macos-15', *MAC_ARM_PROFILES)
+PLATFORMS = (*UBUNTU_VERSIONS, 'macos-14', 'macos-15', *MAC_ARM_PROFILES, 'windows-2022')
+WINDOWS_CHECKSUM = 'f48e0750a21812bca5f82de5f7f5aeae71abee647fab5a582f1742d07eba455f'
 
 
 def host_spec(host_platform, arch):
     if arch not in ARCHES or host_platform not in PLATFORMS:
         raise ValueError('Unsupported host platform or architecture')
+    if host_platform == 'windows-2022':
+        if arch != 'x64':
+            raise ValueError('Windows Server 2022 hosts require x64')
+        return {'label': 'windows-2022-sf', 'image': 'windows-2022',
+                'checksum': WINDOWS_CHECKSUM, 'package': 'win', 'system': 'Windows'}
     if host_platform in UBUNTU_VERSIONS:
         if host_platform == 'ubuntu-latest' and arch != 'x64':
             raise ValueError('ubuntu-latest supports x64 only; select a numbered ARM64 image')
@@ -64,8 +71,12 @@ def host_spec(host_platform, arch):
 
 def runner_labels(host_platform, arch, label_suffix=''):
     spec = host_spec(host_platform, arch)
+    if host_platform == 'windows-2022':
+        if label_suffix not in ('', 'sf'):
+            raise ValueError('Unsupported Windows label suffix')
+        return ['self-hosted', 'Windows', 'X64', spec['label']]
     if label_suffix and (label_suffix != 'sf' or host_platform != 'ubuntu-24.04'):
-        raise ValueError('The sf label suffix requires native Ubuntu 24.04')
+        raise ValueError('The sf label suffix requires native Ubuntu 24.04 or Windows 2022')
     label = ('ubuntu-24' + ('-arm' if arch == 'arm64' else '') + '-sf'
              if label_suffix else spec['label'])
     return ['self-hosted', spec['system'], 'X64' if arch == 'x64' else 'ARM64',
@@ -74,6 +85,10 @@ def runner_labels(host_platform, arch, label_suffix=''):
 
 def validate_host(host_platform, arch, system, machine, version):
     host_spec(host_platform, arch)
+    if host_platform == 'windows-2022':
+        if system != 'Windows' or machine.upper() not in ('AMD64', 'X86_64') or not re.fullmatch(r'10\.0\.20348(?:\.\d+)?', version):
+            raise ValueError('Host does not match Windows Server 2022 x64')
+        return
     expected_system = 'Linux' if host_platform in UBUNTU_VERSIONS else 'Darwin'
     expected_machine = 'x86_64' if arch == 'x64' else ('aarch64' if system == 'Linux' else 'arm64')
     expected_version = UBUNTU_VERSIONS[host_platform] if expected_system == 'Linux' else host_platform.split('-')[1]
@@ -99,34 +114,61 @@ def matrix(pool, x64, arm64, host_platform='linux'):
 def child_environment(parent):
     # In particular, omit GITHUB_*, ACTIONS_*, RUNNER_*, GH_TOKEN and our
     # registration secrets. The nested runner creates its own job context.
-    allowed = ('HOME', 'USER', 'LOGNAME', 'PATH', 'LANG', 'LC_ALL', 'SHELL', 'TERM')
-    return {key: parent[key] for key in allowed if key in parent}
+    allowed = ('HOME', 'USER', 'LOGNAME', 'PATH', 'LANG', 'LC_ALL', 'SHELL', 'TERM',
+               'SYSTEMROOT', 'SYSTEMDRIVE', 'WINDIR', 'COMSPEC', 'PATHEXT',
+               'TEMP', 'TMP', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA',
+               'PROGRAMFILES', 'PROGRAMFILES(X86)', 'PROGRAMW6432',
+               'PROGRAMDATA', 'ALLUSERSPROFILE', 'USERNAME', 'USERDOMAIN',
+               'HOMEDRIVE', 'HOMEPATH', 'OS', 'PROCESSOR_ARCHITECTURE',
+               'NUMBER_OF_PROCESSORS', 'CHOCOLATEYINSTALL')
+    return {key: value for key, value in parent.items() if key.upper() in allowed}
 
 
 def start_runner(directory, jit, env, log):
     # Keep the supervisor's directory and diagnostics private, while matching
     # normal hosted-runner permissions for checkouts and generated packages.
+    if os.name == 'nt':
+        return subprocess.Popen(['cmd.exe', '/d', '/c', 'run.cmd', '--jitconfig', jit],
+                                cwd=directory, env=env, stdout=log, stderr=log,
+                                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
     return subprocess.Popen(['./run.sh', '--jitconfig', jit], cwd=directory, env=env,
                             stdout=log, stderr=log, start_new_session=True, umask=0o022)
 
 
 def download_runner(directory, arch, host_platform='linux'):
     spec = host_spec(host_platform, arch)
-    archive = directory / 'runner.tar.gz'
-    url = f'https://github.com/actions/runner/releases/download/v{VERSION}/actions-runner-{spec["package"]}-{arch}-{VERSION}.tar.gz'
+    extension = 'zip' if spec['package'] == 'win' else 'tar.gz'
+    archive = directory / ('runner.' + extension)
+    url = f'https://github.com/actions/runner/releases/download/v{VERSION}/actions-runner-{spec["package"]}-{arch}-{VERSION}.{extension}'
     with urllib.request.urlopen(url, timeout=120) as response, archive.open('wb') as output:
         shutil.copyfileobj(response, output)
     with archive.open('rb') as downloaded:
         checksum = hashlib.file_digest(downloaded, 'sha256').hexdigest()
     if checksum != spec['checksum']:
         raise RuntimeError('Runner archive verification failed')
-    with tarfile.open(archive) as package:
-        package.extractall(directory, filter='data')
+    if extension == 'zip':
+        with zipfile.ZipFile(archive) as package:
+            for name in package.namelist():
+                if Path(name).is_absolute() or '..' in Path(name).parts or ':' in name:
+                    raise RuntimeError('Unsafe runner ZIP member')
+            package.extractall(directory)
+    else:
+        with tarfile.open(archive) as package:
+            package.extractall(directory, filter='data')
     archive.unlink()
 
 
 def stop(process):
     if process is None or process.poll() is not None:
+        return
+    if os.name == 'nt':
+        try:
+            process.send_signal(signal.CTRL_BREAK_EVENT)
+            process.wait(timeout=30)
+        except (OSError, subprocess.TimeoutExpired):
+            subprocess.run(['taskkill', '/PID', str(process.pid), '/T', '/F'],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+            process.wait(timeout=30)
         return
     try:
         os.killpg(process.pid, signal.SIGINT)
@@ -153,11 +195,18 @@ def serve():
     if arch not in ARCHES or not re.fullmatch(r'[1-9][0-9]?', slot):
         raise ValueError('Invalid runner slot')
     system = platform.system()
-    version = platform.freedesktop_os_release()['VERSION_ID'] if system == 'Linux' else platform.mac_ver()[0]
+    version = (platform.freedesktop_os_release()['VERSION_ID'] if system == 'Linux'
+               else platform.version() if system == 'Windows' else platform.mac_ver()[0])
     validate_host(host_platform, arch, system, platform.machine(), version)
     env = child_environment(os.environ)
     process = None
     directory = Path(tempfile.mkdtemp(prefix='temporary-runner-', dir=os.environ['RUNNER_TEMP']))
+    if os.name == 'nt':
+        # Remove inherited ACLs; only this VM user, SYSTEM and Administrators.
+        identity = subprocess.check_output(['whoami'], text=True).strip()
+        subprocess.run(['icacls', str(directory), '/inheritance:r', '/grant:r',
+                        identity + ':(OI)(CI)F', '*S-1-5-18:(OI)(CI)F',
+                        '*S-1-5-32-544:(OI)(CI)F'], stdout=subprocess.DEVNULL, check=True)
     def interrupted(signum, frame):
         raise InterruptedError('Host workflow interrupted')
     signal.signal(signal.SIGTERM, interrupted)
@@ -194,7 +243,13 @@ def serve():
         # local admin credentials for interrupted/unassigned registrations.
         # Container workspaces can contain root-owned files; destroy only our
         # dedicated temporary tree, never the parent runner workspace.
-        subprocess.run(['sudo', 'rm', '-rf', '--', str(directory)], check=False)
+        if os.name == 'nt':
+            def writable_remove(function, path, error):
+                os.chmod(path, 0o700)
+                function(path)
+            shutil.rmtree(directory, onexc=writable_remove)
+        else:
+            subprocess.run(['sudo', 'rm', '-rf', '--', str(directory)], check=False)
 
 
 if __name__ == '__main__':
